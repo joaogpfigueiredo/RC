@@ -42,55 +42,32 @@ int main(int argc, char *argv[]) {
 	  erro("Connect");
 
   char buffer[BUF_SIZE];
-  int nread;
+  int nread = 0;
   char text[BUF_SIZE]; //variavel onde se vai guardar o que o cliente quer enviar para o server
   char role [BUF_SIZE];
 
-  //nread = read(fd,buffer,BUF_SIZE -1); //introduzir credenciais
-  //buffer[nread] = '\0';
-  //printf("%s\n",buffer);
-  
-  while(1){
-    //fflush(stdout);
-    nread = read(fd,buffer,BUF_SIZE -1); //le a mensagem username
-    buffer[nread] = '\0';
-    printf("%s\n",buffer);
+  nread = read(fd, buffer, BUF_SIZE -1); //le a mensagem username
+  buffer[nread] = '\0';
+  printf("%s", buffer);
 
-    fgets(text,BUF_SIZE,stdin); //introduzir user
-    write(fd,text, 1 + strlen(text));
+  fgets(text, BUF_SIZE, stdin); //introduzir user
+  write(fd, text, 1 + strlen(text));
 
-    fflush(stdout);
+  nread = read(fd, buffer, BUF_SIZE -1); //le a mensagem password
+  buffer[nread] = '\0';
+  printf("%s", buffer);
 
-    nread = read(fd,buffer,BUF_SIZE -1); //le a mensagem password
-    buffer[nread] = '\0';
-    printf("%s\n",buffer);
+  fgets(text, BUF_SIZE, stdin);
+  write(fd, text, 1 + strlen(text));
 
-    fgets(text, BUF_SIZE, stdin);
-    write(fd,text, 1 + strlen(text));
+  nread = read(fd, buffer, BUF_SIZE - 1); //le se vem ok
+  buffer[nread] = '\0';
+  printf("%s\n", buffer);
 
-    fflush(stdout);
-
-    nread = read(fd,buffer,BUF_SIZE -1); //le se vem ok
-    buffer[nread] = '\0';
-    printf("%s\n",buffer);
-
-    if(strcmp(buffer,"OK\n") == 0){
-      nread = read(fd,role,BUF_SIZE-1);
-      role[BUF_SIZE] = '\0';
-      printf("%s",role);
+  if(strcmp(buffer,"OK") == 0){
+    while(1){
+      // Código a fazer
     }
-    //fgets(text,BUF_SIZE,stdin);  // recebe o texto do teclado
-    if(strcmp(text,"SAIR\n") == 0){ // verifica se o que foi escrito é SAIR;
-      write(fd, text, 1 + strlen(text)); //Escreve SAIR
-      //nread = read(fd, buffer,BUF_SIZE -1); 
-      //buffer[nread] = '\0';
-      //printf("%s\n",buffer); //le a mensagem do servidor e depois encerra a sessão
-      break;
-    }
-    //write(fd, text, 1 + strlen(text));
-    //nread = read(fd,buffer,BUF_SIZE-1); // mensagem (server) que diz se a mensagem enviada corresponde a um dos endereços do ficheiro de texto
-    //buffer[nread] = '\0';
-    //printf("%s\n",buffer);
   }
   close(fd);
   exit(0);

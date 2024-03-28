@@ -11,7 +11,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#define PORTO_TURMAS 9000
+#define PORTO_TURMAS 9001
 #define PORTO_CONFIG 9876
 #define BUF_SIZE 1024
 #define USER_LENGTH 16
@@ -19,7 +19,7 @@
 #define PASSWORD_LENGTH 20
 #define MAX_LINE_LENGTH 300
 
-//volatile int count = 0;
+int login(const char *filename, const char *username, const char *password, int client_fd);
 
 void *process_client(void *arg) {
     int client_socket = *((int *)arg);
@@ -28,41 +28,33 @@ void *process_client(void *arg) {
     int nread;
     char username[BUF_SIZE];
     char password[BUF_SIZE];
-    char welcome[] = "Bem-Vindo ao Servior!\n";
 
-    //write(client_socket,welcome, 1 + strlen(welcome));
+    write(client_socket,"Bem-Vindo ao Servior!\nDigite o seu username: ", 1 + strlen("Bem-Vindo ao Servior!\nDigite o seu username: "));
+    nread = read(client_socket, username, BUF_SIZE-1);
+    username[nread] = '\0';
 
-    while(1){
-        write(client_socket,"Bem-Vindo ao Servior!\nDigite o seu username: ", 1 + strlen("Bem-Vindo ao Servior!\nDigite o seu username: "));
-        nread = read(client_socket,username, BUF_SIZE-1);
-        username[BUF_SIZE] = '\0';
+    write(client_socket,"Digite a sua password: ", strlen("Digite a sua password: "));
+    nread = read(client_socket, password, BUF_SIZE-1);
+    password[nread] = '\0';
 
-        printf("%s",username);
+    if(login("ficheiro_config.txt", username, password, client_socket) == 1){
+        while(1) {
+            //count ++;
+            //printf("Ligado, numero de ligações: %d\n",count)
 
-        write(client_socket,"Digite a sua password:", strlen("Digite a sua password:"));
-        nread = read(client_socket,password, BUF_SIZE-1);
-        password[BUF_SIZE] = '\0';
-
-
-        printf("%d\n",login("ficheiro_config.txt", username, password, client_socket));
-        if(login("ficheiro_config.txt", username, password, client_socket)==1){
-            break;
+            //do{
+            // nread = read(client_socket , buffer, BUF_SIZE-1);
+            //buffer[nread] = '\0';
+            //buffer[strcspn(buffer, "\r\n")] = 0;
+            //printf("Cliente disse: %s\n",buffer);
+            //if (strcmp(buffer,"SAIR")==0){
+                //count--;
+                //printf("Adeus, numero de ligações: %d\n",count);
+                //break;
+            //}
+            //fflush(stdout);
+            //}while(nread > 0);
         }
-        //count ++;
-        //printf("Ligado, numero de ligações: %d\n",count)
-
-        //do{
-       // nread = read(client_socket , buffer, BUF_SIZE-1);
-        //buffer[nread] = '\0';
-        //buffer[strcspn(buffer, "\r\n")] = 0;
-        //printf("Cliente disse: %s\n",buffer);
-        //if (strcmp(buffer,"SAIR")==0){
-            //count--;
-            //printf("Adeus, numero de ligações: %d\n",count);
-            //break;
-        //}
-        //fflush(stdout);
-        //}while(nread > 0);
     }
     close(client_socket); 
     return NULL;
@@ -71,7 +63,7 @@ void *process_client(void *arg) {
 void *verifica_tcp(void *arg){ //void *arg permite que sejam passados qualquer tipo de variavel
     int tcp_fd = *((int *) arg); //Vai buscar o valor apontado pelo ponteiro arg (Em int)
     struct sockaddr_in client_addr;
-    int client; //, client_addr_size;
+    int client, client_addr_size;
     //client_addr_size = sizeof(client_addr);
     while(1) {
         struct sockaddr_in client_addr;
@@ -99,13 +91,10 @@ void *verifica_tcp(void *arg){ //void *arg permite que sejam passados qualquer t
 int login(const char *filename, const char *username, const char *password, int client_fd) {
     FILE *file;
     char line[MAX_LINE_LENGTH];
-    char fusername [USER_LENGTH];
-    char fpassword [PASSWORD_LENGTH];
-    char frole [ROLE_LENGTH];
+    char fusername [MAX_LINE_LENGTH];
+    char fpassword [MAX_LINE_LENGTH];
+    char frole [MAX_LINE_LENGTH];
     char mensagem[BUF_SIZE];
-    printf("entrei\n");
-    //printf("%d",strlen(username));
-    //printf("%d",strlen(password));
 
     // Tenta abrir o arquivo para leitura
     file = fopen(filename, "r");
@@ -115,11 +104,10 @@ int login(const char *filename, const char *username, const char *password, int 
     }
 
     // Lê o arquivo linha por linha
-    while (fgets(line, MAX_LINE_LENGTH, file) != NULL){
+    while (fgets(line, MAX_LINE_LENGTH, file)){
         if (sscanf(line, "%s;%s;%s", fusername, fpassword, frole) == 3){
-            printf("%s, %s",fusername,fpassword);
-            if ((strcmp(username,fusername)== 0) && (strcmp(password,fpassword)==0)){
-                sprintf(mensagem,"OK\n");
+            if (strcmp(username, fusername) == 0 && strcmp(password, fpassword) == 0){
+                sprintf(mensagem, "OK");
                 write(client_fd, mensagem, 1 + strlen(mensagem));
                 write(client_fd, frole, 1 + strlen(frole));
                 fclose(file);
@@ -127,12 +115,11 @@ int login(const char *filename, const char *username, const char *password, int 
             }
         }
     }
-    sprintf(mensagem,"Rejected\n");
+    sprintf(mensagem, "REJECTED");
     write(client_fd, mensagem, 1 + strlen(mensagem));
     fclose(file);
     return 0;
 }
-
 
 void erro(char *msg){
 	printf("Erro: %s\n", msg);
@@ -140,10 +127,12 @@ void erro(char *msg){
 }
 
 int main(){
-
-    int tcp_fd, udp_fd;
-    struct sockaddr_in tcp_addr, udp_addr;
-    pthread_t thread_tcp, thread_udp;
+    int tcp_fd; 
+    int udp_fd;
+    struct sockaddr_in tcp_addr;
+    struct udp_addr;
+    pthread_t thread_tcp; 
+    pthread_t thread_udp;
 
     //////////////////////////////////TCP//////////////////////////////////////////
 
