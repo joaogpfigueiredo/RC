@@ -1,0 +1,3 @@
+Ricardo;gty78;administrador
+Figueiredo;casino123;aluno
+Hitler;judeu451;professor
