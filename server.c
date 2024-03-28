@@ -11,7 +11,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#define PORTO_TURMAS 9001
+#define PORTO_TURMAS 9000
 #define PORTO_CONFIG 9876
 #define BUF_SIZE 1024
 #define USER_LENGTH 16
@@ -26,35 +26,36 @@ void *process_client(void *arg) {
     free(arg);
 
     int nread;
+    char buffer[BUF_SIZE];
+    char mensagem[BUF_SIZE];
     char username[BUF_SIZE];
     char password[BUF_SIZE];
 
     write(client_socket,"Bem-Vindo ao Servior!\nDigite o seu username: ", 1 + strlen("Bem-Vindo ao Servior!\nDigite o seu username: "));
     nread = read(client_socket, username, BUF_SIZE-1);
     username[nread] = '\0';
+    username[strcspn(username, "\r\n")] = 0;
 
     write(client_socket,"Digite a sua password: ", strlen("Digite a sua password: "));
     nread = read(client_socket, password, BUF_SIZE-1);
     password[nread] = '\0';
+    password[strcspn(password, "\r\n")] = 0;
 
     if(login("ficheiro_config.txt", username, password, client_socket) == 1){
-        while(1) {
-            //count ++;
-            //printf("Ligado, numero de ligações: %d\n",count)
+        do{
+            nread = read(client_socket, buffer, BUF_SIZE-1);
+            buffer[nread] = '\0';
+            buffer[strcspn(buffer, "\r\n")] = 0;
+            if(strcmp(buffer,"SAIR") == 0){
+                write(client_socket, "SAIR", 1 + strlen("SAIR"));
+                break;
+            }
 
-            //do{
-            // nread = read(client_socket , buffer, BUF_SIZE-1);
-            //buffer[nread] = '\0';
-            //buffer[strcspn(buffer, "\r\n")] = 0;
-            //printf("Cliente disse: %s\n",buffer);
-            //if (strcmp(buffer,"SAIR")==0){
-                //count--;
-                //printf("Adeus, numero de ligações: %d\n",count);
-                //break;
-            //}
-            //fflush(stdout);
-            //}while(nread > 0);
-        }
+            sprintf(mensagem, "Comando recebido com sucesso.");
+            write(client_socket, mensagem, 1 + strlen(mensagem));
+
+            fflush(stdout);
+        }while(nread > 0);
     }
     close(client_socket); 
     return NULL;
@@ -105,10 +106,8 @@ int login(const char *filename, const char *username, const char *password, int 
 
     // Lê o arquivo linha por linha
     while (fgets(line, MAX_LINE_LENGTH, file)){
-        if (sscanf(line, "%s;%s;%s", fusername, fpassword, frole) == 3){
-            if (strcmp(username, fusername) == 0 && strcmp(password, fpassword) == 0){
-                sprintf(mensagem, "OK");
-                write(client_fd, mensagem, 1 + strlen(mensagem));
+        if (sscanf(line, "%[^;];%[^;];%[^;]", fusername, fpassword, frole) == 3) {
+            if (strcmp(username, fusername) == 0 && strcmp(password, fpassword) == 0) {
                 write(client_fd, frole, 1 + strlen(frole));
                 fclose(file);
                 return 1;

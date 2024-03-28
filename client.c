@@ -61,12 +61,28 @@ int main(int argc, char *argv[]) {
   write(fd, text, 1 + strlen(text));
 
   nread = read(fd, buffer, BUF_SIZE - 1); //le se vem ok
+  printf("%s\n", buffer);
+
+  nread = read(fd, buffer, BUF_SIZE - 1); //le se vem ok
   buffer[nread] = '\0';
   printf("%s\n", buffer);
 
-  if(strcmp(buffer,"OK") == 0){
-    while(1){
-      // Código a fazer
+  if(strcmp(buffer, "REJECTED") != 0) {
+    while(1) {
+      fgets(text, BUF_SIZE, stdin);
+
+      if(strcmp(text,"SAIR\n") == 0) { 
+        write(fd, text, 1 + strlen(text)); 
+        nread = read(fd, buffer,BUF_SIZE -1); 
+        buffer[nread] = '\0';
+        printf("%s\n",buffer);
+        break;
+      }
+
+      write(fd, text, 1 + strlen(text));
+      nread = read(fd, buffer, BUF_SIZE-1);
+      buffer[nread] = '\0';
+      printf("%s\n",buffer);
     }
   }
   close(fd);
