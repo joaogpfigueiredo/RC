@@ -1,2 +1,3 @@
 Ricardo;gty78;administrador
 Figueiredo;casino123;aluno
+Jose;rfr03;professor

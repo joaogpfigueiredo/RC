@@ -16,6 +16,7 @@
 
 void erro(char *msg);
 
+
 int main(int argc, char *argv[]) {
   char endServer[100];
   int fd;
@@ -44,46 +45,35 @@ int main(int argc, char *argv[]) {
   char buffer[BUF_SIZE];
   int nread = 0;
   char text[BUF_SIZE]; //variavel onde se vai guardar o que o cliente quer enviar para o server
-  char role [BUF_SIZE];
+  char role[BUF_SIZE];
 
   nread = read(fd, buffer, BUF_SIZE -1); //le a mensagem username
   buffer[nread] = '\0';
-  printf("%s", buffer);
+  printf("%s\n", buffer);
 
   fgets(text, BUF_SIZE, stdin); //introduzir user
   write(fd, text, 1 + strlen(text));
 
-  nread = read(fd, buffer, BUF_SIZE -1); //le a mensagem password
-  buffer[nread] = '\0';
-  printf("%s", buffer);
-
-  fgets(text, BUF_SIZE, stdin);
-  write(fd, text, 1 + strlen(text));
-
-  nread = read(fd, buffer, BUF_SIZE - 1); //le se vem ok
-  printf("%s\n", buffer);
-
   nread = read(fd, buffer, BUF_SIZE - 1); //le se vem ok
   buffer[nread] = '\0';
-  printf("%s\n", buffer);
 
-  if(strcmp(buffer, "REJECTED") != 0) {
+  sscanf(buffer,"%s %s",text,role);
+
+  if(strcmp(text, "OK") == 0) {
+    printf("%s\n", text);
+    nread = read(fd,buffer, BUF_SIZE - 1);
+    buffer[nread] = '\0';
+    printf("%s\n", buffer);
     while(1) {
       fgets(text, BUF_SIZE, stdin);
-
-      if(strcmp(text,"SAIR\n") == 0) { 
-        write(fd, text, 1 + strlen(text)); 
-        nread = read(fd, buffer,BUF_SIZE -1); 
-        buffer[nread] = '\0';
-        printf("%s\n",buffer);
-        break;
-      }
-
       write(fd, text, 1 + strlen(text));
       nread = read(fd, buffer, BUF_SIZE-1);
       buffer[nread] = '\0';
       printf("%s\n",buffer);
+      fflush(stdout);
     }
+  } else{
+    printf("%s\n",buffer);
   }
   close(fd);
   exit(0);

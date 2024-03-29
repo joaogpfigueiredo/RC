@@ -11,52 +11,92 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#define PORTO_TURMAS 9000
+#define PORTO_TURMAS 9003
 #define PORTO_CONFIG 9876
 #define BUF_SIZE 1024
 #define USER_LENGTH 16
 #define ROLE_LENGTH 16
 #define PASSWORD_LENGTH 20
 #define MAX_LINE_LENGTH 300
+#define opc_alunos "Lista de comandos para Alunos:\n> LIST_CLASSES\n> LIST_SUBSCRIBED\n> SUBSCRIBE_CLASS <nome>\n> CTRL+C para encerrar"
+#define opc_professores "Lista de comandos para Professores:\n> LIST_CLASSES\n> LIST_SUBSCRIBED\n> CREATE_CLASS <nome> <size>\n> SEND <nome> <mensagem>\n> CTRL+C para encerrar"
 
-int login(const char *filename, const char *username, const char *password, int client_fd);
+int login(const char *filename, const char *username, const char *password, int client_fd, char *role);
 
 void *process_client(void *arg) {
     int client_socket = *((int *)arg);
     free(arg);
 
     int nread;
-    char buffer[BUF_SIZE];
-    char mensagem[BUF_SIZE];
-    char username[BUF_SIZE];
-    char password[BUF_SIZE];
+    char buffer[BUF_SIZE], mensagem[BUF_SIZE], comando[BUF_SIZE], username[BUF_SIZE], 
+    password[BUF_SIZE], role[BUF_SIZE], args[BUF_SIZE], args1[BUF_SIZE];
 
-    write(client_socket,"Bem-Vindo ao Servior!\nDigite o seu username: ", 1 + strlen("Bem-Vindo ao Servior!\nDigite o seu username: "));
-    nread = read(client_socket, username, BUF_SIZE-1);
-    username[nread] = '\0';
-    username[strcspn(username, "\r\n")] = 0;
+    write(client_socket,"Bem-Vindo ao Servior! (LOGIN <username> <password>): ", 1 + strlen("Bem-Vindo ao Servior! (LOGIN <username> <password>): "));
+    nread = read(client_socket, buffer, BUF_SIZE-1);
+    buffer[nread] = '\0';
+    buffer[strcspn(buffer, "\r\n")] = 0;
 
-    write(client_socket,"Digite a sua password: ", strlen("Digite a sua password: "));
-    nread = read(client_socket, password, BUF_SIZE-1);
-    password[nread] = '\0';
-    password[strcspn(password, "\r\n")] = 0;
-
-    if(login("ficheiro_config.txt", username, password, client_socket) == 1){
-        do{
-            nread = read(client_socket, buffer, BUF_SIZE-1);
-            buffer[nread] = '\0';
-            buffer[strcspn(buffer, "\r\n")] = 0;
-            if(strcmp(buffer,"SAIR") == 0){
-                write(client_socket, "SAIR", 1 + strlen("SAIR"));
-                break;
+    if(sscanf(buffer,"%s %s %s",comando,username,password)==3){
+        if(strcmp(comando,"LOGIN") == 0){
+            if(login("ficheiro_config.txt", username, password, client_socket, role) == 1){
+                role[strcspn(role, "\r\n")] = 0;
+                if(strcmp(role,"aluno") == 0){
+                    write(client_socket, opc_alunos, 1 + strlen(opc_alunos));
+                } else if(strcmp(role,"professor") == 0){
+                    write(client_socket,opc_professores, 1 + strlen(opc_professores));
+                }
+                do{
+                    nread = read(client_socket, buffer, BUF_SIZE-1);
+                    buffer[nread] = '\0';
+                    buffer[strcspn(buffer, "\r\n")] = 0;
+                    if(strcmp(role,"aluno") == 0){
+                        if(sscanf(buffer,"%s %s",comando,args) != 2){
+                            if(strcmp(buffer,"LIST_CLASSES") == 0 || strcmp(buffer,"LIST_SUBSCRIBED") == 0){
+                                sprintf(mensagem, "Comando recebido com sucesso!");
+                                write(client_socket, mensagem, 1 + strlen(mensagem));
+                                break;                                    
+                            } else{
+                                write(client_socket,"Comando Inválido!",strlen("Comando Inválido\n"));
+                            }
+                        } else{
+                            if(strcmp(comando, "SUBSCRIBE_CLASS") == 0){
+                                sprintf(mensagem, "Comando recebido com sucesso!");
+                                write(client_socket, mensagem, 1 + strlen(mensagem));
+                                break;                                    
+                            } else{
+                                write(client_socket,"Comando Inválido!",strlen("Comando Inválido\n"));
+                            }                            
+                        }
+                        
+                    } else{
+                        if(sscanf(buffer,"%s %s %s",comando,args,args1) != 3){
+                            if(strcmp(buffer,"LIST_CLASSES") == 0 || strcmp(buffer,"LIST_SUBSCRIBED") == 0){
+                                sprintf(mensagem, "Comando recebido com sucesso!");
+                                write(client_socket, mensagem, 1 + strlen(mensagem));
+                                break;                                    
+                            } else{
+                                write(client_socket,"Comando Inválido!",strlen("Comando Inválido\n"));
+                            }
+                        } else{
+                            if(strcmp(comando,"CREATE_CLASS") == 0 || strcmp(comando,"SEND") == 0){
+                                sprintf(mensagem, "Comando recebido com sucesso!");
+                                write(client_socket, mensagem, 1 + strlen(mensagem));
+                                break;                                    
+                            } else{
+                                write(client_socket,"Comando Inválido!",strlen("Comando Inválido\n"));
+                            }
+                        }
+                    }
+                    fflush(stdout);
+                }while(nread > 0);
             }
-
-            sprintf(mensagem, "Comando recebido com sucesso.");
-            write(client_socket, mensagem, 1 + strlen(mensagem));
-
-            fflush(stdout);
-        }while(nread > 0);
+        } else{
+            write(client_socket,"Comando Inválido!",strlen("Comando Inválido!"));
+        }
+    }else{
+        write(client_socket,"Comando Inválido ou Numero de Argumentos Inválido!",strlen("Comando Inválido ou Numero de Argumentos Inválido!"));
     }
+
     close(client_socket); 
     return NULL;
 }
@@ -66,6 +106,7 @@ void *verifica_tcp(void *arg){ //void *arg permite que sejam passados qualquer t
     struct sockaddr_in client_addr;
     int client, client_addr_size;
     //client_addr_size = sizeof(client_addr);
+
     while(1) {
         struct sockaddr_in client_addr;
         socklen_t client_addr_size = sizeof(client_addr);
@@ -85,11 +126,44 @@ void *verifica_tcp(void *arg){ //void *arg permite que sejam passados qualquer t
     }
 }
 
-//void *verifica_udp(void *arg){
+void *process_admin(void *arg){
+    int udp_fd = *((int *)arg);
+    free(arg);
 
-//}
+    struct sockaddr_in si_minha, si_outra;
+    int recv_len;
+	socklen_t slen = sizeof(si_outra);
+    char buf[BUF_SIZE];
 
-int login(const char *filename, const char *username, const char *password, int client_fd) {
+	// Cria um socket para recepção de pacotes UDP
+	if((udp_fd=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+		perror("Erro na criação do socket");
+	}
+
+    // Preenchimento da socket address structure
+	si_minha.sin_family = AF_INET;
+	si_minha.sin_port = htons(PORTO_CONFIG);
+	si_minha.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	// Associa o socket à informação de endereço
+	if(bind(udp_fd,(struct sockaddr*)&si_minha, sizeof(si_minha)) == -1) {
+		perror("Erro no bind");
+	}
+
+    while(1){
+        if((recv_len = recvfrom(udp_fd, buf, BUF_SIZE, 0, (struct sockaddr *) &si_outra, (socklen_t *)&slen)) == -1) {
+            perror("Erro no recvfrom");
+        }
+        // Para ignorar o restante conteúdo (anterior do buffer)
+        buf[recv_len]='\0';
+        buf[strcspn(buf, "\r\n")] = 0; // Remover o '\n' ou '\r\n' no final do buffer
+
+        printf("Conteúdo da mensagem: %s\n" , buf);
+    }
+}
+
+
+int login(const char *filename, const char *username, const char *password, int client_fd, char *role) {
     FILE *file;
     char line[MAX_LINE_LENGTH];
     char fusername [MAX_LINE_LENGTH];
@@ -108,7 +182,9 @@ int login(const char *filename, const char *username, const char *password, int 
     while (fgets(line, MAX_LINE_LENGTH, file)){
         if (sscanf(line, "%[^;];%[^;];%[^;]", fusername, fpassword, frole) == 3) {
             if (strcmp(username, fusername) == 0 && strcmp(password, fpassword) == 0) {
-                write(client_fd, frole, 1 + strlen(frole));
+                sprintf(mensagem,"OK %s",frole);
+                write(client_fd,mensagem,1 + strlen(mensagem));
+                strcpy(role,frole);
                 fclose(file);
                 return 1;
             }
@@ -159,6 +235,13 @@ int main(){
 	erro("na funcao listen");
 
     pthread_join(thread_tcp, NULL);
+
+    if(pthread_create(&thread_udp, NULL, process_admin, (void *)&udp_fd) != 0){
+        perror("Error creating UDP thread");
+        exit(EXIT_FAILURE);
+    }
+
+    pthread_join(thread_udp, NULL);
 
     return 0;
 }
