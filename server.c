@@ -308,7 +308,7 @@ int main(int argc, char *argv []){
         exit(EXIT_FAILURE);
     }
 
-    if( listen(tcp_fd, 5) < 0) erro("na funcao listen");
+    if( listen(tcp_fd, SOMAXCONN) < 0) erro("na funcao listen"); // SOMAXCONN: Constante que representa o máximo permitido pelo sistema operacional.
 
     if(pthread_create(&thread_udp, NULL, udp_connection, (void *)&udp_fd) != 0){
         perror("Error creating UDP thread");
