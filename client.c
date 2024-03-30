@@ -42,10 +42,8 @@ int main(int argc, char *argv[]) {
   if (connect(fd,(struct sockaddr *)&addr,sizeof (addr)) < 0)
 	  erro("Connect");
 
-  char buffer[BUF_SIZE];
   int nread = 0;
-  char text[BUF_SIZE]; //variavel onde se vai guardar o que o cliente quer enviar para o server
-  char role[BUF_SIZE];
+  char buffer[BUF_SIZE], text[BUF_SIZE];
 
   nread = read(fd, buffer, BUF_SIZE -1); //le a mensagem username
   buffer[nread] = '\0';
@@ -57,18 +55,20 @@ int main(int argc, char *argv[]) {
   nread = read(fd, buffer, BUF_SIZE - 1); //le se vem ok
   buffer[nread] = '\0';
 
-  sscanf(buffer,"%s %s",text,role);
+  if(strcmp(buffer, "OK") == 0) {
+    printf("%s\n", buffer);
 
-  if(strcmp(text, "OK") == 0) {
-    printf("%s\n", text);
-    nread = read(fd,buffer, BUF_SIZE - 1);
+    nread = read(fd, buffer, BUF_SIZE -1); //le a mensagem username
     buffer[nread] = '\0';
     printf("%s\n", buffer);
+    
     while(1) {
       fgets(text, BUF_SIZE, stdin);
       write(fd, text, 1 + strlen(text));
+      
       nread = read(fd, buffer, BUF_SIZE-1);
       buffer[nread] = '\0';
+      
       printf("%s\n",buffer);
       fflush(stdout);
     }
