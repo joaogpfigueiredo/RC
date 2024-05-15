@@ -16,6 +16,7 @@
 #include <signal.h>
 
 #define BUF_SIZE 1024
+#define NUSERS 1000
 #define USER_LENGTH 16
 #define ROLE_LENGTH 16
 #define PASSWORD_LENGTH 20
@@ -30,10 +31,17 @@ typedef struct {
     char role[ROLE_LENGTH];
 } User;
 
+typedef struct {
+    pthread_t client_thread;
+    int *client;
+} client_threads;
+
 User *users;
+client_threads *clients;
 
 pthread_t thread_tcp, thread_udp;
 
+int running = 1, userCounter = 0;
 int PORTO_TURMAS, PORTO_CONFIG;
 int tcp_fd, udp_fd;
 char ficheiro_config[MAX_LINE_LENGTH];

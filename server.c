@@ -51,7 +51,7 @@ void saveUsers() {
     }
 
     // Escreve os usuários no arquivo
-    for(int i = 0; i < 100; i++) {
+    for(int i = 0; i < NUSERS; i++) {
         if(strcmp(users[i].username, "\0") != 0){
             fprintf(file, "%s;%s;%s", users[i].username, users[i].password, users[i].role);
         }
@@ -61,7 +61,7 @@ void saveUsers() {
 }
 
 int del_user(const char *username) {
-    for(int i = 0; i < 100; i++) {
+    for(int i = 0; i < NUSERS; i++) {
         if(strcmp(users[i].username, username) == 0) {
             strcpy(users[i].username, "\0");
             strcpy(users[i].password, "\0");
@@ -74,7 +74,7 @@ int del_user(const char *username) {
 
 int login(const char *username, const char *password, char *role) {
     
-    for(int i = 0; i < 100; i++) {
+    for(int i = 0; i < NUSERS; i++) {
         if(strcmp(users[i].username, username) == 0 && strcmp(users[i].password, password) == 0) {
             strcpy(role, users[i].role);
             return 1;
@@ -89,47 +89,66 @@ void sendMessage(int socket, char *buffer, struct sockaddr_in si_outra, socklen_
     }
 }
 
-void sigint_handler(int signum) {
+void cleanup(int signum) {
     if(signum == SIGINT) {
         printf("\nA encerrar o servidor...\n");
+
+        running = 0;
+
         saveUsers();
+
+        for(int i = 0; i < userCounter; i++) {
+            write(*clients[i].client, "CLOSE", strlen("CLOSE"));
+
+            if(clients[i].client_thread != 0) pthread_cancel(clients[i].client_thread);
+            
+            if(close(*clients[i].client) != 0) perror("Failed to close client socket");
+
+            free(clients[i].client);
+        }
+
         pthread_cancel(thread_tcp);
         pthread_cancel(thread_udp);
+
         free(users);
+
         close(tcp_fd);
         close(udp_fd);
+
         exit(0);
     }
 }
 
 void *process_client(void *arg) {
-    int client_socket = *((int *)arg);
-    free(arg);
+    int client_socket = *((int *) arg);
 
     int nread;
     char buffer[BUF_SIZE], mensagem[BUF_SIZE], comando[BUF_SIZE], username[BUF_SIZE], 
     password[BUF_SIZE], role[BUF_SIZE], args[BUF_SIZE], args1[BUF_SIZE];
 
-    write(client_socket,"Bem-Vindo ao Servior! (LOGIN <username> <password>): ", 1 + strlen("Bem-Vindo ao Servior! (LOGIN <username> <password>): "));
-    nread = read(client_socket, buffer, BUF_SIZE-1);
+    usleep(250);
+
+    write(client_socket, "Bem-Vindo ao Servior! (LOGIN <username> <password>): ", 1 + strlen("Bem-Vindo ao Servior! (LOGIN <username> <password>): "));
+    nread = read(client_socket, buffer, BUF_SIZE - 1);
     buffer[nread] = '\0';
     buffer[strcspn(buffer, "\r\n")] = 0;
 
-    if(sscanf(buffer,"%s %s %s",comando,username,password)==3) {
+    if(sscanf(buffer, "%s %s %s", comando, username, password) == 3) {
         if(strcmp(comando,"LOGIN") == 0) {
             if(login(username, password, role) == 1) {
 
                 write(client_socket, "OK", 1 + strlen("OK"));
 
                 role[strcspn(role, "\r\n")] = 0;
-                printf("%ld", strlen(role));
+                printf("Role: %s\n", role);
 
-                if(strcmp(role, "aluno") == 0){
+                if(strcmp(role, "aluno") == 0) {
                     write(client_socket, opc_alunos, 1 + strlen(opc_alunos));
                 } else if(strcmp(role, "professor") == 0){
-                    write(client_socket,opc_professores, 1 + strlen(opc_professores));
+                    write(client_socket, opc_professores, 1 + strlen(opc_professores));
                 }
-                do{
+
+                do {
                     nread = read(client_socket, buffer, BUF_SIZE-1);
                     buffer[nread] = '\0';
                     buffer[strcspn(buffer, "\r\n")] = 0;
@@ -140,7 +159,7 @@ void *process_client(void *arg) {
                                 write(client_socket, mensagem, 1 + strlen(mensagem));
                                 break;                                    
                             } else{
-                                write(client_socket,"Comando Inválido!",strlen("Comando Inválido!"));
+                                write(client_socket, "Comando Inválido!", strlen("Comando Inválido!"));
                             }
                         } else{
                             if(strcmp(comando, "SUBSCRIBE_CLASS") == 0) {
@@ -148,7 +167,7 @@ void *process_client(void *arg) {
                                 write(client_socket, mensagem, 1 + strlen(mensagem));
                                 break;                                    
                             }else {
-                                write(client_socket,"Comando Inválido!",strlen("Comando Inválido!"));
+                                write(client_socket, "Comando Inválido!", strlen("Comando Inválido!"));
                             }                            
                         }
                         
@@ -159,7 +178,7 @@ void *process_client(void *arg) {
                                 write(client_socket, mensagem, 1 + strlen(mensagem));
                                 break;                                    
                             } else{
-                                write(client_socket,"Comando Inválido!",strlen("Comando Inválido!"));
+                                write(client_socket, "Comando Inválido!", strlen("Comando Inválido!"));
                             }
                         } else{
                             if(strcmp(comando,"CREATE_CLASS") == 0 || strcmp(comando,"SEND") == 0){
@@ -167,7 +186,7 @@ void *process_client(void *arg) {
                                 write(client_socket, mensagem, 1 + strlen(mensagem));
                                 break;                                    
                             } else{
-                                write(client_socket,"Comando Inválido!",strlen("Comando Inválido!"));
+                                write(client_socket, "Comando Inválido!", strlen("Comando Inválido!"));
                             }
                         }
                     }
@@ -178,14 +197,15 @@ void *process_client(void *arg) {
                 write(client_socket , mensagem, 1 + strlen(mensagem));
             }
         }else {
-            write(client_socket,"Comando Inválido!",strlen("Comando Inválido!"));
+            write(client_socket, "Comando Inválido!", strlen("Comando Inválido!"));
         }
     }else{
-        write(client_socket,"Comando Inválido ou Numero de Argumentos Inválido!",strlen("Comando Inválido ou Numero de Argumentos Inválido!"));
+        write(client_socket, "Comando Inválido ou Numero de Argumentos Inválido!", strlen("Comando Inválido ou Numero de Argumentos Inválido!"));
     }
 
-    close(client_socket); 
-    return NULL;
+    userCounter--;
+    close(client_socket);
+    pthread_exit(NULL);
 }
 
 void *tcp_connection(void *arg){ //void *arg permite que sejam passados qualquer tipo de variavel
@@ -194,19 +214,29 @@ void *tcp_connection(void *arg){ //void *arg permite que sejam passados qualquer
     while(1) {
         struct sockaddr_in client_addr;
         socklen_t client_addr_size = sizeof(client_addr);
+
         int *client = malloc(sizeof(int));
+
         if ((*client = accept(tcp_fd, (struct sockaddr *)&client_addr, &client_addr_size)) < 0) {
             perror("Error in accept");
             free(client); // Libertar a memória se o accept falhar
             continue;
         }
+
+        clients[userCounter].client = client;
+        userCounter++;
+
         pthread_t client_thread;
+
+        clients[userCounter].client_thread = client_thread;
+
         if(pthread_create(&client_thread, NULL, process_client, client) != 0) {
             perror("Failed to create thread for client");
             close(*client);
             free(client); // Libertar a memória se a criação da thread falhar
         }
-        pthread_detach(client_thread); // Isto permite que a thread liberte recursos quando terminar
+        
+        pthread_detach(client_thread);
     }
 }
 
@@ -219,7 +249,7 @@ void *udp_connection(void *arg){
     char buffer[BUF_SIZE], comando[BUF_SIZE], username[BUF_SIZE], password[BUF_SIZE], role[BUF_SIZE], args[BUF_SIZE];
 
 	// Cria um socket para recepção de pacotes UDP
-	if((udp_fd=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+	if((udp_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
 		perror("Erro na criação do socket");
 	}
 
@@ -292,7 +322,7 @@ void *udp_connection(void *arg){
                                 if(strcmp(comando, "LIST") == 0) {
                                     sendMessage(udp_fd, "Comando recebido com sucesso!\n", si_outra, slen);
                                 }else if(strcmp(comando, "QUIT_SERVER") == 0) {
-                                    close(udp_fd);
+                                    // cleanup();
                                     exit(1);
                                 }else {
                                     sendMessage(udp_fd, "Comando Inválido ou Numero de Argumentos Inválido!!\n", si_outra, slen);
@@ -300,7 +330,7 @@ void *udp_connection(void *arg){
                             }
                         }
                     }else {
-                        sendMessage(udp_fd, "Usuário não possui permissões de administrador, tente outra conta!\n", si_outra, slen);
+                        sendMessage(udp_fd, "O usuário não possui permissões de administrador, tente outra conta!\n", si_outra, slen);
                     }
                 }else {
                     sendMessage(udp_fd, "REJECTED\n", si_outra, slen);
@@ -326,9 +356,10 @@ int main(int argc, char *argv []) {
         exit(1);
     }
 
-    signal(SIGINT, sigint_handler);
+    signal(SIGINT, cleanup);
 
-    users = malloc(sizeof(User) * 100);
+    users = malloc(sizeof(User) * NUSERS);
+    clients = malloc(sizeof(client_threads) * NUSERS);
 
     struct sockaddr_in tcp_addr;
 
@@ -356,7 +387,7 @@ int main(int argc, char *argv []) {
         exit(EXIT_FAILURE);
     }
 
-    if( listen(tcp_fd, 5) < 0) erro("na funcao listen");
+    if(listen(tcp_fd, 5) < 0) erro("na funcao listen");
 
     if(pthread_create(&thread_udp, NULL, udp_connection, (void *)&udp_fd) != 0){
         perror("Error creating UDP thread");
