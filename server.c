@@ -1,40 +1,16 @@
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <netdb.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <arpa/inet.h>
-#include <pthread.h>
-
-#define BUF_SIZE 1024
-#define USER_LENGTH 16
-#define ROLE_LENGTH 16
-#define PASSWORD_LENGTH 20
-#define MAX_LINE_LENGTH 300
-#define opc_alunos "Lista de comandos para Alunos:\n> LIST_CLASSES\n> LIST_SUBSCRIBED\n> SUBSCRIBE_CLASS <nome>\n> CTRL+C para encerrar"
-#define opc_professores "Lista de comandos para Professores:\n> LIST_CLASSES\n> LIST_SUBSCRIBED\n> CREATE_CLASS <nome> <size>\n> SEND <nome> <mensagem>\n> CTRL+C para encerrar"
-#define opc_administrador "Lista de comandos para Administradores:\n> LIST\n> QUIT_SERVER\n> DEL <username>\n> ADD_USER <username> <password> <aluno|professor|administrador>\n> CTRL+C para encerrar\n"
-
-typedef struct {
-    char username[USER_LENGTH];
-    char password[PASSWORD_LENGTH];
-    char role[ROLE_LENGTH];
-} User;
-
-User *users;
-
-int PORTO_TURMAS;
-int PORTO_CONFIG;
-char ficheiro_config[MAX_LINE_LENGTH];
+#include "server.h"
 
 void erro(char *msg){
 	printf("Erro: %s\n", msg);
 	exit(-1);
+}
+
+char *createMulticastIp() {
+    char *multicast_ip = malloc(sizeof(char) * 16);
+    srand(time(NULL));
+    sprintf(multicast_ip, "239.0.0.%d", rand() % 256);
+    return multicast_ip;
+
 }
 
 void loadUsers() {
@@ -77,7 +53,7 @@ void saveUsers() {
     // Escreve os usuários no arquivo
     for(int i = 0; i < 100; i++) {
         if(strcmp(users[i].username, "\0") != 0){
-            fprintf(file, "%s;%s;%s\n", users[i].username, users[i].password, users[i].role);
+            fprintf(file, "%s;%s;%s", users[i].username, users[i].password, users[i].role);
         }
     }
     fclose(file);
@@ -115,7 +91,13 @@ void sendMessage(int socket, char *buffer, struct sockaddr_in si_outra, socklen_
 
 void sigint_handler(int signum) {
     if(signum == SIGINT) {
+        printf("\nA encerrar o servidor...\n");
         saveUsers();
+        pthread_cancel(thread_tcp);
+        pthread_cancel(thread_udp);
+        free(users);
+        close(tcp_fd);
+        close(udp_fd);
         exit(0);
     }
 }
@@ -161,11 +143,11 @@ void *process_client(void *arg) {
                                 write(client_socket,"Comando Inválido!",strlen("Comando Inválido!"));
                             }
                         } else{
-                            if(strcmp(comando, "SUBSCRIBE_CLASS") == 0){
+                            if(strcmp(comando, "SUBSCRIBE_CLASS") == 0) {
                                 sprintf(mensagem, "Comando recebido com sucesso!");
                                 write(client_socket, mensagem, 1 + strlen(mensagem));
                                 break;                                    
-                            } else{
+                            }else {
                                 write(client_socket,"Comando Inválido!",strlen("Comando Inválido!"));
                             }                            
                         }
@@ -348,10 +330,7 @@ int main(int argc, char *argv []) {
 
     users = malloc(sizeof(User) * 100);
 
-    int tcp_fd, udp_fd;
     struct sockaddr_in tcp_addr;
-    pthread_t thread_tcp; 
-    pthread_t thread_udp;
 
     PORTO_TURMAS = atoi(argv[1]);
     PORTO_CONFIG = atoi(argv[2]);
