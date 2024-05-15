@@ -20,13 +20,105 @@
 #define opc_professores "Lista de comandos para Professores:\n> LIST_CLASSES\n> LIST_SUBSCRIBED\n> CREATE_CLASS <nome> <size>\n> SEND <nome> <mensagem>\n> CTRL+C para encerrar"
 #define opc_administrador "Lista de comandos para Administradores:\n> LIST\n> QUIT_SERVER\n> DEL <username>\n> ADD_USER <username> <password> <aluno|professor|administrador>\n> CTRL+C para encerrar\n"
 
+typedef struct {
+    char username[USER_LENGTH];
+    char password[PASSWORD_LENGTH];
+    char role[ROLE_LENGTH];
+} User;
+
+User *users;
+
 int PORTO_TURMAS;
 int PORTO_CONFIG;
 char ficheiro_config[MAX_LINE_LENGTH];
 
-void sendMessage(int socket, char *buffer, struct sockaddr_in si_outra, socklen_t slen);
-int login(const char *filename, const char *username, const char *password, char *role);
-void erro(char *msg);
+void erro(char *msg){
+	printf("Erro: %s\n", msg);
+	exit(-1);
+}
+
+void loadUsers() {
+    FILE *file;
+    char line[MAX_LINE_LENGTH];
+    char fusername [MAX_LINE_LENGTH];
+    char fpassword [MAX_LINE_LENGTH];
+    char frole [MAX_LINE_LENGTH];
+    int i = 0;
+
+    // Tenta abrir o arquivo para leitura
+    file = fopen(ficheiro_config, "r");
+    if (file == NULL) {
+        fprintf(stderr, "Não foi possível abrir o arquivo %s\n", ficheiro_config);
+        exit(1);
+    }
+
+    // Lê o arquivo linha por linha
+    while (fgets(line, MAX_LINE_LENGTH, file)){
+        if (sscanf(line, "%[^;];%[^;];%[^;]", fusername, fpassword, frole) == 3) {
+            strcpy(users[i].username, fusername);
+            strcpy(users[i].password, fpassword);
+            strcpy(users[i].role, frole);
+            i++;
+        }
+    }
+    fclose(file);
+}
+
+void saveUsers() {
+    FILE *file;
+
+    // Tenta abrir o arquivo para escrita
+    file = fopen(ficheiro_config, "w");
+    if (file == NULL) {
+        fprintf(stderr, "Não foi possível abrir o arquivo %s\n", ficheiro_config);
+        exit(1);
+    }
+
+    // Escreve os usuários no arquivo
+    for(int i = 0; i < 100; i++) {
+        if(strcmp(users[i].username, "\0") != 0){
+            fprintf(file, "%s;%s;%s\n", users[i].username, users[i].password, users[i].role);
+        }
+    }
+    fclose(file);
+
+}
+
+int del_user(const char *username) {
+    for(int i = 0; i < 100; i++) {
+        if(strcmp(users[i].username, username) == 0) {
+            strcpy(users[i].username, "\0");
+            strcpy(users[i].password, "\0");
+            strcpy(users[i].role, "\0");
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int login(const char *username, const char *password, char *role) {
+    
+    for(int i = 0; i < 100; i++) {
+        if(strcmp(users[i].username, username) == 0 && strcmp(users[i].password, password) == 0) {
+            strcpy(role, users[i].role);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void sendMessage(int socket, char *buffer, struct sockaddr_in si_outra, socklen_t slen) {
+    if (sendto(socket, buffer, strlen(buffer), 0, (struct sockaddr *)&si_outra, slen) == -1) {
+        erro("Erro ao enviar mensagem UDP");
+    }
+}
+
+void sigint_handler(int signum) {
+    if(signum == SIGINT) {
+        saveUsers();
+        exit(0);
+    }
+}
 
 void *process_client(void *arg) {
     int client_socket = *((int *)arg);
@@ -43,7 +135,7 @@ void *process_client(void *arg) {
 
     if(sscanf(buffer,"%s %s %s",comando,username,password)==3) {
         if(strcmp(comando,"LOGIN") == 0) {
-            if(login(ficheiro_config, username, password, role) == 1) {
+            if(login(username, password, role) == 1) {
 
                 write(client_socket, "OK", 1 + strlen("OK"));
 
@@ -159,18 +251,24 @@ void *udp_connection(void *arg){
 		perror("Erro no bind");
 	}
 
+    if((recv_len = recvfrom(udp_fd, buffer, BUF_SIZE, 0, (struct sockaddr *) &si_outra, (socklen_t *)&slen)) == -1) {
+        erro("Erro no recvfrom");
+    }
+
+    sendMessage(udp_fd, "Bem-Vindo ao Servior! (LOGIN <username> <password>): \n", si_outra, slen);
+
     while(1){
         
         if((recv_len = recvfrom(udp_fd, buffer, BUF_SIZE, 0, (struct sockaddr *) &si_outra, (socklen_t *)&slen)) == -1) {
             erro("Erro no recvfrom");
         }
-	
+
         buffer[recv_len]='\0';
         buffer[strcspn(buffer, "\r\n")] = 0;
 
         if(sscanf(buffer,"%s %s %s",comando,username,password) == 3) {
             if(strcmp(comando,"LOGIN") == 0) {
-                if(login(ficheiro_config, username, password, role) == 1) {
+                if(login(username, password, role) == 1) {
 
                     role[strcspn(role, "\r\n")] = 0;
 
@@ -199,7 +297,12 @@ void *udp_connection(void *arg){
                                 }
                             }else if(sscanf(buffer, "%s %s", comando, args) == 2) {
                                 if(strcmp(comando, "DEL") == 0) {
-                                    sendMessage(udp_fd, "Comando recebido com sucesso!\n", si_outra, slen);
+                                    if(del_user(args)) {
+                                        sendMessage(udp_fd, "Usuário removido com sucesso!\n", si_outra, slen);
+                                    }else {
+                                        sendMessage(udp_fd, "Usuário não encontrado!\n", si_outra, slen);
+                                    }
+
                                 }else {
                                     sendMessage(udp_fd, "Comando Inválido!\n", si_outra, slen);
                                 }
@@ -235,60 +338,26 @@ void *udp_connection(void *arg){
     return NULL;
 }
 
-void sendMessage(int socket, char *buffer, struct sockaddr_in si_outra, socklen_t slen) {
-    if (sendto(socket, buffer, strlen(buffer), 0, (struct sockaddr *)&si_outra, slen) == -1) {
-    erro("Erro ao enviar mensagem UDP");
-  }
-}
-
-
-int login(const char *filename, const char *username, const char *password, char *role) {
-    FILE *file;
-    char line[MAX_LINE_LENGTH];
-    char fusername [MAX_LINE_LENGTH];
-    char fpassword [MAX_LINE_LENGTH];
-    char frole [MAX_LINE_LENGTH];
-
-    // Tenta abrir o arquivo para leitura
-    file = fopen(filename, "r");
-    if (file == NULL) {
-        fprintf(stderr, "Não foi possível abrir o arquivo %s\n", filename);
-        return 0;
-    }
-
-    // Lê o arquivo linha por linha
-    while (fgets(line, MAX_LINE_LENGTH, file)){
-        if (sscanf(line, "%[^;];%[^;];%[^;]", fusername, fpassword, frole) == 3) {
-            if (strcmp(username, fusername) == 0 && strcmp(password, fpassword) == 0) {
-                strcpy(role,frole);
-                fclose(file);
-                return 1;
-            }
-        }
-    }
-    fclose(file);
-    return 0;
-}
-
-void erro(char *msg){
-	printf("Erro: %s\n", msg);
-	exit(-1);
-}
-
-int main(int argc, char *argv []){
-    int tcp_fd, udp_fd;
-    struct sockaddr_in tcp_addr;
-    pthread_t thread_tcp; 
-    pthread_t thread_udp;
-
+int main(int argc, char *argv []) {
     if(argc != 4) {
         printf("Invalid input <./filename> <PORTO_TURMAS> <PORTO_CONFIG> <ficheiro config>\n");
         exit(1);
     }
 
+    signal(SIGINT, sigint_handler);
+
+    users = malloc(sizeof(User) * 100);
+
+    int tcp_fd, udp_fd;
+    struct sockaddr_in tcp_addr;
+    pthread_t thread_tcp; 
+    pthread_t thread_udp;
+
     PORTO_TURMAS = atoi(argv[1]);
     PORTO_CONFIG = atoi(argv[2]);
     strcpy(ficheiro_config, argv[3]);
+
+    loadUsers();
 
     //////////////////////////////////TCP//////////////////////////////////////////
 
