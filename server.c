@@ -161,33 +161,40 @@ void create_class(int socket_client, char *name, char *size, char *username){
     char message[BUF_SIZE];
     memset(message, 0, sizeof(message));
     //usar um mutex para sincronizar thread ??? 
-    for(int i = 0; i < MAX_TURMAS; i++){
-        if(turmas[i].tamanho_max == -1){
-            turmas[i].tamanho_max = atoi(size);
-            turmas[i].tamanho_atual = 0;
-            turmas[i].alunos = malloc(turmas[i].tamanho_max * sizeof(*turmas[i].alunos));
-            for(int j = 0; j < atoi(size); j ++){
-                strcpy(turmas[i].alunos[j],"");
+    for(int i = 0; i < MAX_TURMAS; i++) {
+        if(strcmp(turmas[i].nome, name) == 0){
+            strcpy(message,"Turma já existente!\n");
+            write(socket_client, message, strlen(message) + 1);
+            return;
+        }else {
+
+            if(turmas[i].tamanho_max == -1) {
+                turmas[i].tamanho_max = atoi(size);
+                turmas[i].tamanho_atual = 0;
+                turmas[i].alunos = malloc(turmas[i].tamanho_max * sizeof(*turmas[i].alunos));
+                for(int j = 0; j < atoi(size); j ++){
+                    strcpy(turmas[i].alunos[j],"");
+                }
+                strcpy(turmas[i].professor,username);
+                strcpy(turmas[i].nome, name);
+
+                //GERAR MULTICAST IP//
+
+                unsigned long ip = htonl(0xEF000000 + i);
+                struct in_addr ip_addr;
+                ip_addr.s_addr = ip;
+
+                char *ip_str = inet_ntoa(ip_addr);
+                strcpy(turmas[i].multicast,ip_str);
+
+                /////////////////////
+
+                sprintf(message, "OK %s", turmas[i].multicast);
+
+                write(socket_client, message, strlen(message));
+
+                return;         
             }
-            strcpy(turmas[i].professor,username);
-            strcpy(turmas[i].nome, name);
-
-            //GERAR MULTICAST IP//
-
-            unsigned long ip = htonl(0xEF000000 + i);
-            struct in_addr ip_addr;
-            ip_addr.s_addr = ip;
-
-            char *ip_str = inet_ntoa(ip_addr);
-            strcpy(turmas[i].multicast,ip_str);
-
-            /////////////////////
-
-            sprintf(message, "OK %s", turmas[i].multicast);
-
-            write(socket_client, message, strlen(message));
-
-            return;         
         }
     }
     strcpy(message,"REJECTED\n");
@@ -226,7 +233,7 @@ void list_subscribed (int socket_client, char *nome){
         if(turmas[i].tamanho_max != -1){
             for(int k = 0; k < turmas[i].tamanho_max; k++){
                 if(strcmp(turmas[i].alunos[k],nome) == 0){
-                    sprintf(buff,"%s ",turmas[i].nome);
+                    sprintf(buff,"%s | ",turmas[i].nome);
                     strcat(message, buff);
                     break;
                 }
@@ -235,7 +242,7 @@ void list_subscribed (int socket_client, char *nome){
     }
 
     if(strlen(message) == 0){
-        strcpy(message, "Não está inscrito em nenhuma turma");
+        strcpy(message, "Não está inscrito em nenhuma turma!\n");
         write(socket_client, message, strlen(message) + 1);
         return;
     }
@@ -251,9 +258,16 @@ void subscribe_class(int socket_client, char *nome_turma, char *nome_aluno){
     char message[BUF_SIZE];
     memset(message, 0, sizeof(message));
     for(int i = 0; i < MAX_TURMAS; i++){
-        if(strcmp(nome_turma,turmas[i].nome) == 0){
+        if(strcmp(nome_turma, turmas[i].nome) == 0){
             for(int k = 0; k < turmas[i].tamanho_max; k++){
                 if(strcmp(turmas[i].alunos[k], "") == 0){
+                    for(int j = 0; j < NUSERS; j++){
+                        if(strcmp(turmas[i].alunos[j], nome_aluno) == 0){
+                            strcpy(message, "Já está inscrito nesta turma!\n");
+                            write(socket_client, message, strlen(message));
+                            return;
+                        }
+                    }
                     strcpy(turmas[i].alunos[k], nome_aluno);
                     turmas[i].tamanho_atual++;
                     sprintf(message, "ACCEPTED %s", turmas[i].multicast);
@@ -293,11 +307,12 @@ void sendToMulticast(int client_fd, char *nome, char *message) {
         }
 
         close(socketMulticast);
+        write(client_fd, "Mensagem enviada com sucesso!\n", strlen("Mensagem enviada com sucesso!\n") + 1);
         return;
         }
     }
 
-    write(client_fd, "Turma não foi encontrada ou não tem alunos!\n", strlen("Turma não foi encontrada ou não tem alunos!\n") + 1);
+    write(client_fd, "A turma não foi encontrada ou não tem alunos!\n", strlen("A turma não foi encontrada ou não tem alunos!\n") + 1);
     
 }
 

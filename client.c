@@ -19,7 +19,7 @@
 #define BUF_SIZE 1024
 #define MAX_TURMAS 1000
 
-pthread_t my_treads[MAX_TURMAS];
+pthread_t *my_treads;
 
 int sock[MAX_TURMAS];
 
@@ -43,6 +43,7 @@ void cleanUp() {
       }
     }
 
+    free(my_treads);
     close(fd);
 }
 
@@ -57,13 +58,28 @@ void signalHandler(int signum) {
 }
 
 void *receiveMulticastMessage(void *arg) {
-  char *group = (char *) arg;
+  int sock = *((int *)arg);
 
-  printf("Recebendo mensagens multicast do grupo %s\n", group);
+  while(1) {
+    char buffer[BUF_SIZE];
+    struct sockaddr_in localAddr;
+    socklen_t addrlen = sizeof(localAddr);
+    int bytes_received = recvfrom(sock, buffer, BUF_SIZE, 0, (struct sockaddr *) &localAddr, &addrlen);
+    if (bytes_received < 0) {
+        perror("Erro ao receber a mensagem");
+        exit(1);
+    }
+    buffer[bytes_received] = '\0'; // Adiciona o terminador de string
+    printf("Mensagem recebida: %s\n", buffer);
+  }
+}
+
+void joinMulticast(char *buffer) {
+  char *token = strtok(buffer, " ");
+  token = strtok(NULL, " ");
 
   struct sockaddr_in localAddr;
   struct ip_mreq multicastRequest;
-  char buffer[BUF_SIZE];
 
   // Cria um socket UDP
   if ((sock[num_turmas] = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -77,6 +93,10 @@ void *receiveMulticastMessage(void *arg) {
   localAddr.sin_addr.s_addr = htonl(INADDR_ANY);
   localAddr.sin_port = htons(8080);
 
+  
+  int enable = 1;
+  setsockopt(sock[num_turmas], SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
+
   // Associa o socket ao endereço local
   if (bind(sock[num_turmas], (struct sockaddr *) &localAddr, sizeof(localAddr)) < 0) {
       perror("Erro ao fazer o bind do socket");
@@ -84,23 +104,14 @@ void *receiveMulticastMessage(void *arg) {
   }
 
   // Solicita a participação no grupo multicast
-  multicastRequest.imr_multiaddr.s_addr = inet_addr(group);
+  multicastRequest.imr_multiaddr.s_addr = inet_addr(token);
   multicastRequest.imr_interface.s_addr = htonl(INADDR_ANY);
   if (setsockopt(sock[num_turmas], IPPROTO_IP, IP_ADD_MEMBERSHIP, &multicastRequest, sizeof(multicastRequest)) < 0) {
       perror("Erro ao participar do grupo multicast");
       exit(1);
   }
 
-  while(1) {
-    socklen_t addrlen = sizeof(localAddr);
-    int bytes_received = recvfrom(sock[num_turmas], buffer, BUF_SIZE, 0, (struct sockaddr *) &localAddr, &addrlen);
-    if (bytes_received < 0) {
-        perror("Erro ao receber a mensagem");
-        exit(1);
-    }
-    buffer[bytes_received] = '\0'; // Adiciona o terminador de string
-    printf("Mensagem recebida: %s\n", buffer);
-  }
+  pthread_create(&my_treads[num_turmas], NULL, receiveMulticastMessage, (void *)&sock[num_turmas]);
 }
 
 int main(int argc, char *argv[]) {
@@ -111,6 +122,8 @@ int main(int argc, char *argv[]) {
   }
 
   signal(SIGINT, signalHandler);
+
+  my_treads = (pthread_t *)malloc(MAX_TURMAS * sizeof(pthread_t));
 
   char endServer[100];
   struct sockaddr_in addr;
@@ -184,16 +197,7 @@ int main(int argc, char *argv[]) {
         buffer[nread] = '\0';
         printf("%s\n", buffer);
       }else if(strstr(buffer, "ACCEPTED") != NULL) {
-        char *token = strtok(buffer, " ");
-        token = strtok(NULL, " ");
-
-        printf("Token: %s\n", token);
-        num_turmas++;
-
-        pthread_create(&my_treads[num_turmas], NULL, receiveMulticastMessage, (void *) token);
-
-        pthread_join(my_treads[num_turmas], NULL);
-
+        joinMulticast(buffer);
       }
 
       memset(buffer, 0, sizeof(buffer));
