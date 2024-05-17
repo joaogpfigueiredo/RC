@@ -1,3 +1,8 @@
 Ricardo;gty78;administrador
 Figueiredo;cas123;aluno
 Jose;rfr03;professor
+Carlos;psicologo;professor
+Diogo;barbarussa;aluno
+Goncalo;cavalos;aluno
+Marques;balatro;aluno
+admin;admin;administrador

@@ -13,11 +13,17 @@
 #include <netdb.h>
 #include <pthread.h>
 #include <signal.h>
+#include <sys/select.h>
+#include <arpa/inet.h>
 
 #define BUF_SIZE 1024
+#define MAX_TURMAS 1000
 
-pthread_t close_thread, client_thread;
-int fd, running = 1;
+pthread_t my_treads[MAX_TURMAS];
+
+int sock[MAX_TURMAS];
+
+int fd, running = 1, num_turmas = -1;
 
 void erro(char *msg) {
   printf("Erro: %s\n", msg);
@@ -27,15 +33,22 @@ void erro(char *msg) {
 void cleanUp() {
     running = 0;
 
-    pthread_cancel(client_thread);
-    pthread_cancel(close_thread);
+    for(int i = 0; i < MAX_TURMAS; i++) {
+      if(sock[i] != 0) {
+        close(sock[i]);
+      }
+
+      if(my_treads[i] != 0) {
+        pthread_cancel(my_treads[i]);
+      }
+    }
 
     close(fd);
 }
 
 void signalHandler(int signum) {
   if(signum == SIGINT) {
-    printf("CTRL+C pressed\n");
+    printf("\nCTRL+C pressed\n");
     
     cleanUp();
 
@@ -43,70 +56,51 @@ void signalHandler(int signum) {
   }
 }
 
-void *clientThread(void *arg) {
-  int fd = *(int *) arg;
+void *receiveMulticastMessage(void *arg) {
+  char *group = (char *) arg;
 
-  printf("Client thread\n");
-  
-  int nread = 0;
-  char buffer[BUF_SIZE], text[BUF_SIZE];
+  printf("Recebendo mensagens multicast do grupo %s\n", group);
 
-  nread = read(fd, buffer, BUF_SIZE -1); // Le a mensagem username
-  buffer[nread] = '\0';
-  printf("%s\n", buffer);
-
-  fgets(text, BUF_SIZE, stdin); // Introduzir user
-  write(fd, text, 1 + strlen(text));
-
-  nread = read(fd, buffer, BUF_SIZE - 1); // Lê se vem ok
-  buffer[nread] = '\0';
-
-  if(strcmp(buffer, "OK") == 0) {
-    printf("%s\n", buffer);
-
-    nread = read(fd, buffer, BUF_SIZE - 1); // Lê a mensagem username
-    buffer[nread] = '\0';
-    printf("%s\n", buffer);
-    
-    while(running) {
-      fgets(text, BUF_SIZE, stdin);
-      write(fd, text, 1 + strlen(text));
-      
-      nread = read(fd, buffer, BUF_SIZE - 1);
-      buffer[nread] = '\0';
-      
-      printf("%s\n",buffer);
-      fflush(stdout);
-    }
-
-  } else{
-    printf("%s\n",buffer);
-  }
-
-  close(fd);
-  pthread_exit(NULL);
-}
-
-void *serverCloseThread(void *arg) {
-  int fd = *(int *) arg;
-
-  int nread = 0;
+  struct sockaddr_in localAddr;
+  struct ip_mreq multicastRequest;
   char buffer[BUF_SIZE];
 
-  while(running) {
-    nread = read(fd, buffer, BUF_SIZE - 1);
-    buffer[nread] = '\0';
-
-    if(strcmp(buffer, "CLOSE") == 0) {
-      printf("Server is closing\n");
-      
-      cleanUp();
-
-      exit(0);
-    }
+  // Cria um socket UDP
+  if ((sock[num_turmas] = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+      perror("Erro ao criar o socket");
+      exit(1);
   }
 
-  pthread_exit(NULL);
+  // Configura o endereço local para escutar as mensagens multicast
+  memset(&localAddr, 0, sizeof(localAddr));
+  localAddr.sin_family = AF_INET;
+  localAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  localAddr.sin_port = htons(8080);
+
+  // Associa o socket ao endereço local
+  if (bind(sock[num_turmas], (struct sockaddr *) &localAddr, sizeof(localAddr)) < 0) {
+      perror("Erro ao fazer o bind do socket");
+      exit(1);
+  }
+
+  // Solicita a participação no grupo multicast
+  multicastRequest.imr_multiaddr.s_addr = inet_addr(group);
+  multicastRequest.imr_interface.s_addr = htonl(INADDR_ANY);
+  if (setsockopt(sock[num_turmas], IPPROTO_IP, IP_ADD_MEMBERSHIP, &multicastRequest, sizeof(multicastRequest)) < 0) {
+      perror("Erro ao participar do grupo multicast");
+      exit(1);
+  }
+
+  while(1) {
+    socklen_t addrlen = sizeof(localAddr);
+    int bytes_received = recvfrom(sock[num_turmas], buffer, BUF_SIZE, 0, (struct sockaddr *) &localAddr, &addrlen);
+    if (bytes_received < 0) {
+        perror("Erro ao receber a mensagem");
+        exit(1);
+    }
+    buffer[bytes_received] = '\0'; // Adiciona o terminador de string
+    printf("Mensagem recebida: %s\n", buffer);
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -135,24 +129,75 @@ int main(int argc, char *argv[]) {
 
   if (connect(fd, (struct sockaddr *)&addr,sizeof (addr)) < 0) erro("Connect");
 
-  if(pthread_create(&client_thread, NULL, clientThread, (void *)&fd) != 0){
-        perror("Error creating UDP thread");
-        exit(EXIT_FAILURE);
-  }
+  fd_set read_fds;
 
-  if(pthread_create(&close_thread, NULL, serverCloseThread, (void *)&fd) != 0){
-        perror("Error creating UDP thread");
-        exit(EXIT_FAILURE);
-  }
+  int nread = 0;
+  int max_fd;
+  char buffer[BUF_SIZE], text[BUF_SIZE];
 
-  if(pthread_join(client_thread, NULL) != 0){
-        perror("Error joining UDP thread");
+  nread = read(fd, buffer, BUF_SIZE -1); // Le a mensagem username
+  buffer[nread] = '\0';
+  printf("%s\n", buffer);
+
+  while (1) {
+    FD_ZERO(&read_fds);
+    FD_SET(fd, &read_fds);
+    FD_SET(STDIN_FILENO, &read_fds);
+
+    max_fd = fd > STDIN_FILENO ? fd : STDIN_FILENO;
+
+    if (select(max_fd + 1, &read_fds, NULL, NULL, NULL) == -1) {
+        perror("select");
         exit(EXIT_FAILURE);
-  }
-    
-  if(pthread_join(close_thread, NULL) != 0){
-        perror("Error joining UDP thread");
-        exit(EXIT_FAILURE);
+    }
+
+    if (FD_ISSET(fd, &read_fds)) {
+      // The socket is ready to be read.
+      nread = read(fd, buffer, sizeof(buffer));
+      if (nread > 0) {
+          buffer[nread] = '\0';
+
+        if(strcmp(buffer, "CLOSE") == 0) {
+          printf("Server is closing\n");
+          
+          cleanUp();
+
+          exit(0);
+        }
+        memset(buffer, 0, sizeof(buffer));
+      }
+    }
+
+    if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+      fgets(text, BUF_SIZE, stdin);
+      write(fd, text, 1 + strlen(text));
+
+      nread = read(fd, buffer, BUF_SIZE - 1);
+      buffer[nread] = '\0';
+      printf("%s\n", buffer);
+
+      if(strcmp(buffer, "REJECTED") == 0) {
+        memset(buffer, 0, sizeof(buffer));
+        exit(0);
+      }else if(strcmp(buffer, "OK") == 0) {
+        nread = read(fd, buffer, BUF_SIZE - 1); // Lê se vem ok
+        buffer[nread] = '\0';
+        printf("%s\n", buffer);
+      }else if(strstr(buffer, "ACCEPTED") != NULL) {
+        char *token = strtok(buffer, " ");
+        token = strtok(NULL, " ");
+
+        printf("Token: %s\n", token);
+        num_turmas++;
+
+        pthread_create(&my_treads[num_turmas], NULL, receiveMulticastMessage, (void *) token);
+
+        pthread_join(my_treads[num_turmas], NULL);
+
+      }
+
+      memset(buffer, 0, sizeof(buffer));
+    }
   }
 
   return 0;

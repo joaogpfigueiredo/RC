@@ -16,11 +16,13 @@
 #include <signal.h>
 
 #define BUF_SIZE 1024
-#define NUSERS 1000
+#define NUSERS 100
 #define USER_LENGTH 16
 #define ROLE_LENGTH 16
 #define PASSWORD_LENGTH 20
 #define MAX_LINE_LENGTH 300
+#define MAX_TURMAS 20
+#define MULTICAST_PORT 8080
 #define opc_alunos "Lista de comandos para Alunos:\n> LIST_CLASSES\n> LIST_SUBSCRIBED\n> SUBSCRIBE_CLASS <nome>\n> CTRL+C para encerrar"
 #define opc_professores "Lista de comandos para Professores:\n> LIST_CLASSES\n> LIST_SUBSCRIBED\n> CREATE_CLASS <nome> <size>\n> SEND <nome> <mensagem>\n> CTRL+C para encerrar"
 #define opc_administrador "Lista de comandos para Administradores:\n> LIST\n> QUIT_SERVER\n> DEL <username>\n> ADD_USER <username> <password> <aluno|professor|administrador>\n> CTRL+C para encerrar\n"
@@ -32,6 +34,15 @@ typedef struct {
 } User;
 
 typedef struct {
+    int tamanho_max;
+    int tamanho_atual;
+    char nome[MAX_LINE_LENGTH];
+    char professor[USER_LENGTH];
+    char (*alunos)[USER_LENGTH]; 
+    char multicast[128]; 
+} Turma;
+
+typedef struct {
     pthread_t client_thread;
     int *client;
 } client_threads;
@@ -39,11 +50,19 @@ typedef struct {
 User *users;
 client_threads *clients;
 
+Turma turmas[MAX_TURMAS];
+
 pthread_t thread_tcp, thread_udp;
 
 int running = 1, userCounter = 0;
 int PORTO_TURMAS, PORTO_CONFIG;
-int tcp_fd, udp_fd;
+
+int tcp_fd;
+
+int udp_fd, recv_len;
+struct sockaddr_in si_minha, si_outra;
+socklen_t slen;
+
 char ficheiro_config[MAX_LINE_LENGTH];
 
 #endif
