@@ -150,6 +150,33 @@ void sign_handler(int signum) {
     }
 }
 
+void subscribe_class(int socket_client, char *nome_turma, char *nome_aluno){
+    char message[BUF_SIZE];
+    memset(message, 0, sizeof(message));
+    for(int i = 0; i < MAX_TURMAS; i++){
+        if(strcmp(nome_turma, turmas[i].nome) == 0){
+            for(int k = 0; k < turmas[i].tamanho_max; k++){
+                if(strcmp(turmas[i].alunos[k], "") == 0){
+                    for(int j = 0; j < NUSERS; j++){
+                        if(strcmp(turmas[i].alunos[j], nome_aluno) == 0){
+                            strcpy(message, "Já está inscrito nesta turma!\n");
+                            write(socket_client, message, strlen(message));
+                            return;
+                        }
+                    }
+                    strcpy(turmas[i].alunos[k], nome_aluno);
+                    turmas[i].tamanho_atual++;
+                    sprintf(message, "ACCEPTED %s", turmas[i].multicast);
+                    write(socket_client, message, strlen(message));
+                    return;
+                }
+            }
+        }
+    }
+    strcpy(message,"REJECTED\n");
+    write(socket_client, message, strlen(message));
+}
+
 void create_class(int socket_client, char *name, char *size, char *username){
     char message[BUF_SIZE];
     memset(message, 0, sizeof(message));
@@ -165,10 +192,10 @@ void create_class(int socket_client, char *name, char *size, char *username){
                 turmas[i].tamanho_max = atoi(size);
                 turmas[i].tamanho_atual = 0;
                 turmas[i].alunos = malloc(turmas[i].tamanho_max * sizeof(*turmas[i].alunos));
-                for(int j = 0; j < atoi(size); j ++){
-                    strcpy(turmas[i].alunos[j],"");
+                for(int j = 0; j < atoi(size); j++){
+                    strcpy(turmas[i].alunos[j], "");
                 }
-                strcpy(turmas[i].professor,username);
+                strcpy(turmas[i].professor, username);
                 strcpy(turmas[i].nome, name);
 
                 //GERAR MULTICAST IP//
@@ -182,7 +209,7 @@ void create_class(int socket_client, char *name, char *size, char *username){
 
                 /////////////////////
 
-                sprintf(message, "OK %s", turmas[i].multicast);
+                sprintf(message, "OK %s\n", turmas[i].multicast);
 
                 write(socket_client, message, strlen(message));
 
@@ -225,8 +252,8 @@ void list_subscribed (int socket_client, char *nome){
     for(int i = 0; i < MAX_TURMAS; i++){
         if(turmas[i].tamanho_max != -1){
             for(int k = 0; k < turmas[i].tamanho_max; k++){
-                if(strcmp(turmas[i].alunos[k],nome) == 0){
-                    sprintf(buff,"%s | ",turmas[i].nome);
+                if(strcmp(turmas[i].alunos[k], nome) == 0 || strcmp(turmas[i].professor, nome) == 0) {
+                    sprintf(buff,"{%s/%s}, ", turmas[i].nome, turmas[i].multicast);
                     strcat(message, buff);
                     break;
                 }
@@ -247,61 +274,34 @@ void list_subscribed (int socket_client, char *nome){
     write(socket_client, message, strlen(message) + 1);
 }
 
-void subscribe_class(int socket_client, char *nome_turma, char *nome_aluno){
-    char message[BUF_SIZE];
-    memset(message, 0, sizeof(message));
-    for(int i = 0; i < MAX_TURMAS; i++){
-        if(strcmp(nome_turma, turmas[i].nome) == 0){
-            for(int k = 0; k < turmas[i].tamanho_max; k++){
-                if(strcmp(turmas[i].alunos[k], "") == 0){
-                    for(int j = 0; j < NUSERS; j++){
-                        if(strcmp(turmas[i].alunos[j], nome_aluno) == 0){
-                            strcpy(message, "Já está inscrito nesta turma!\n");
-                            write(socket_client, message, strlen(message));
-                            return;
-                        }
-                    }
-                    strcpy(turmas[i].alunos[k], nome_aluno);
-                    turmas[i].tamanho_atual++;
-                    sprintf(message, "ACCEPTED %s", turmas[i].multicast);
-                    write(socket_client, message, strlen(message));
-                    return;
-                }
-            }
-        }
-    }
-    strcpy(message,"REJECTED\n");
-    write(socket_client, message, strlen(message));
-}
-
 void sendToMulticast(int client_fd, char *nome, char *message) {
     for (int i = 0; i < MAX_TURMAS; i++) {
         if (strcmp(turmas[i].nome, nome) == 0 && turmas[i].tamanho_atual > 0) {
-        int socketMulticast;
-        struct sockaddr_in addrmulticast;
+            int socketMulticast;
+            struct sockaddr_in addrmulticast;
 
-        if ((socketMulticast = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
-            perror("Error in socket");
+            if ((socketMulticast = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+                perror("Error in socket");
+                return;
+            }
+
+            memset(&addrmulticast, 0, sizeof(addrmulticast));
+            addrmulticast.sin_family = AF_INET;
+            addrmulticast.sin_addr.s_addr = inet_addr(turmas[i].multicast);
+            addrmulticast.sin_port = htons(MULTICAST_PORT + i);
+
+            int enable = 3;
+            if(setsockopt(socketMulticast, IPPROTO_IP, IP_MULTICAST_TTL, &enable, sizeof(enable)) < 0) {
+                perror("setsockopt");
+            }
+
+            if (sendto(socketMulticast, message, strlen(message), 0, (struct sockaddr *) &addrmulticast, sizeof(addrmulticast)) < 0) {
+                perror("sendto");
+            }
+
+            close(socketMulticast);
+            write(client_fd, "Mensagem enviada com sucesso!\n", strlen("Mensagem enviada com sucesso!\n") + 1);
             return;
-        }
-
-        memset(&addrmulticast, 0, sizeof(addrmulticast));
-        addrmulticast.sin_family = AF_INET;
-        addrmulticast.sin_addr.s_addr = inet_addr(turmas[i].multicast);
-        addrmulticast.sin_port = htons(MULTICAST_PORT);
-
-        int enable = 3;
-        if(setsockopt(socketMulticast, IPPROTO_IP, IP_MULTICAST_TTL, &enable, sizeof(enable)) < 0) {
-            perror("setsockopt");
-        }
-
-        if (sendto(socketMulticast, message, strlen(message), 0, (struct sockaddr *) &addrmulticast, sizeof(addrmulticast)) < 0) {
-            perror("sendto");
-        }
-
-        close(socketMulticast);
-        write(client_fd, "Mensagem enviada com sucesso!\n", strlen("Mensagem enviada com sucesso!\n") + 1);
-        return;
         }
     }
 

@@ -63,17 +63,17 @@ void signalHandler(int signum) {
 
 void *receiveMulticastMessage(void *arg) {
   int sock = *((int *)arg);
+  char buffer[BUF_SIZE];
+  struct sockaddr_in localAddr;
+  socklen_t addrlen = sizeof(localAddr);
 
   while(1) {
-    char buffer[BUF_SIZE];
-    struct sockaddr_in localAddr;
-    socklen_t addrlen = sizeof(localAddr);
     int bytes_received = recvfrom(sock, buffer, BUF_SIZE, 0, (struct sockaddr *) &localAddr, &addrlen);
     if (bytes_received < 0) {
         perror("Erro ao receber a mensagem");
         exit(1);
     }
-    buffer[bytes_received] = '\0'; // Adiciona o terminador de string
+    buffer[bytes_received] = '\0';
     printf("Mensagem recebida: %s\n", buffer);
   }
 }
@@ -95,7 +95,7 @@ void joinMulticast(char *buffer) {
   memset(&localAddr, 0, sizeof(localAddr));
   localAddr.sin_family = AF_INET;
   localAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  localAddr.sin_port = htons(8080);
+  localAddr.sin_port = htons(8080 + num_turmas);
 
   
   int enable = 1;
