@@ -192,15 +192,11 @@ int main(int argc, char *argv[]) {
       nread = read(fd, buffer, BUF_SIZE - 1);
       buffer[nread] = '\0';
       printf("%s\n", buffer);
-
+      
       if(strcmp(buffer, "REJECTED") == 0) {
-        memset(buffer, 0, sizeof(buffer));
+        cleanUp();
         exit(0);
-      }else if(strcmp(buffer, "OK") == 0) {
-        nread = read(fd, buffer, BUF_SIZE - 1); // Lê se vem ok
-        buffer[nread] = '\0';
-        printf("%s\n", buffer);
-      }else if(strstr(buffer, "ACCEPTED") != NULL) {
+      } if(strstr(buffer, "ACCEPTED") != NULL) {
         num_turmas++;
         joinMulticast(buffer);
       }

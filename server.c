@@ -11,13 +11,6 @@ void sendMessage(int socket_client, char *buffer, struct sockaddr_in si_outra, s
     }
 }
 
-char *createMulticastIp() {
-    char *multicast_ip = malloc(sizeof(char) * 16);
-    srand(time(NULL));
-    sprintf(multicast_ip, "239.0.0.%d", rand() % 256);
-    return multicast_ip;
-}
-
 void loadUsers() {
     FILE *file;
     char line[MAX_LINE_LENGTH];
@@ -145,7 +138,7 @@ void cleanup() {
     pthread_cancel(thread_udp);
 
     free(users);
-    free(clients);
+    free(clients);  
 
     close(tcp_fd);
     close(udp_fd);
@@ -297,7 +290,7 @@ void sendToMulticast(int client_fd, char *nome, char *message) {
         addrmulticast.sin_addr.s_addr = inet_addr(turmas[i].multicast);
         addrmulticast.sin_port = htons(MULTICAST_PORT);
 
-        int enable = 1;
+        int enable = 3;
         if(setsockopt(socketMulticast, IPPROTO_IP, IP_MULTICAST_TTL, &enable, sizeof(enable)) < 0) {
             perror("setsockopt");
         }
@@ -332,14 +325,12 @@ void *process_client(void *arg) {
         if(strcmp(comando,"LOGIN") == 0) {
             if(login(username, password, role) == 1) {
 
-                write(client_socket, "OK", 1 + strlen("OK"));
-
                 role[strcspn(role, "\r\n")] = 0;
                 printf("Usuário %s conectado!\n", username);
 
-                if(strcmp(role, "aluno") == 0) {
+                if(strstr(role, "aluno") != NULL) {
                     write(client_socket, opc_alunos, 1 + strlen(opc_alunos));
-                } else if(strcmp(role, "professor") == 0){
+                } else if(strstr(role, "professor") != NULL){
                     write(client_socket, opc_professores, 1 + strlen(opc_professores));
                 }
 
@@ -377,7 +368,7 @@ void *process_client(void *arg) {
                             if(strcmp(comando,"CREATE_CLASS") == 0) {
                                 create_class(client_socket, args, args1, username);
                             }else if(strcmp(comando,"SEND") == 0) {
-                                
+
                                 char *mensagem = strchr(buffer, ' ');
                                 mensagem = strchr(mensagem + 1, ' ');
                                 mensagem = mensagem + 1;
@@ -441,8 +432,6 @@ void *tcp_connection(void *arg){ //void *arg permite que sejam passados qualquer
 void *udp_connection(void *arg){
     int udp_fd = *((int *)arg);
 
-    struct sockaddr_in si_minha, si_outra;
-
     int recv_len;
 	socklen_t slen = sizeof(si_outra);
     char buffer[BUF_SIZE], comando[BUF_SIZE], username[BUF_SIZE], password[BUF_SIZE], role[BUF_SIZE], args[BUF_SIZE];
@@ -483,7 +472,7 @@ void *udp_connection(void *arg){
 
                     role[strcspn(role, "\r\n")] = 0;
 
-                    if(strcmp(role, "administrador") == 0) {
+                    if(strstr(role, "administrador") != NULL) {
                         sendMessage(udp_fd, "OK\n", si_outra, slen);
                         sendMessage(udp_fd, opc_administrador, si_outra, slen);
                         

@@ -14,6 +14,9 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <sys/stat.h>
 
 #define BUF_SIZE 1024
 #define NUSERS 100
@@ -23,9 +26,9 @@
 #define MAX_LINE_LENGTH 300
 #define MAX_TURMAS 20
 #define MULTICAST_PORT 8080
-#define opc_alunos "Lista de comandos para Alunos:\n> LIST_CLASSES\n> LIST_SUBSCRIBED\n> SUBSCRIBE_CLASS <nome>\n> CTRL+C para encerrar"
-#define opc_professores "Lista de comandos para Professores:\n> LIST_CLASSES\n> LIST_SUBSCRIBED\n> CREATE_CLASS <nome> <size>\n> SEND <nome> <mensagem>\n> CTRL+C para encerrar"
-#define opc_administrador "Lista de comandos para Administradores:\n> LIST\n> QUIT_SERVER\n> DEL <username>\n> ADD_USER <username> <password> <aluno|professor|administrador>\n> CTRL+C para encerrar\n"
+#define opc_alunos "OK\nLista de comandos para Alunos:\n> LIST_CLASSES\n> LIST_SUBSCRIBED\n> SUBSCRIBE_CLASS <nome>\n> CTRL+C para encerrar"
+#define opc_professores "OK\nLista de comandos para Professores:\n> LIST_CLASSES\n> LIST_SUBSCRIBED\n> CREATE_CLASS <nome> <size>\n> SEND <nome> <mensagem>\n> CTRL+C para encerrar"
+#define opc_administrador "OK\nLista de comandos para Administradores:\n> LIST\n> QUIT_SERVER\n> DEL <username>\n> ADD_USER <username> <password> <aluno|professor|administrador>\n> CTRL+C para encerrar\n"
 
 typedef struct {
     char username[USER_LENGTH];
