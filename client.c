@@ -19,9 +19,12 @@
 #define BUF_SIZE 1024
 #define MAX_TURMAS 1000
 
-pthread_t *my_treads;
+typedef struct {
+  pthread_t my_treads;
+  int sock;
+} Turma;
 
-int sock[MAX_TURMAS];
+Turma *turmas;
 
 int fd, running = 1, num_turmas = -1;
 
@@ -34,16 +37,17 @@ void cleanUp() {
     running = 0;
 
     for(int i = 0; i < MAX_TURMAS; i++) {
-      if(sock[i] != 0) {
-        close(sock[i]);
+      if(turmas[i].sock != 0) {
+        close(turmas[i].sock);
       }
 
-      if(my_treads[i] != 0) {
-        pthread_cancel(my_treads[i]);
+      if(turmas[i].my_treads != 0) {
+        pthread_cancel(turmas[i].my_treads);
       }
     }
 
-    free(my_treads);
+    free(turmas);
+
     close(fd);
 }
 
@@ -82,7 +86,7 @@ void joinMulticast(char *buffer) {
   struct ip_mreq multicastRequest;
 
   // Cria um socket UDP
-  if ((sock[num_turmas] = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+  if ((turmas[num_turmas].sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
       perror("Erro ao criar o socket");
       exit(1);
   }
@@ -95,10 +99,10 @@ void joinMulticast(char *buffer) {
 
   
   int enable = 1;
-  setsockopt(sock[num_turmas], SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
+  setsockopt(turmas[num_turmas].sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
 
   // Associa o socket ao endereço local
-  if (bind(sock[num_turmas], (struct sockaddr *) &localAddr, sizeof(localAddr)) < 0) {
+  if (bind(turmas[num_turmas].sock, (struct sockaddr *) &localAddr, sizeof(localAddr)) < 0) {
       perror("Erro ao fazer o bind do socket");
       exit(1);
   }
@@ -106,12 +110,12 @@ void joinMulticast(char *buffer) {
   // Solicita a participação no grupo multicast
   multicastRequest.imr_multiaddr.s_addr = inet_addr(token);
   multicastRequest.imr_interface.s_addr = htonl(INADDR_ANY);
-  if (setsockopt(sock[num_turmas], IPPROTO_IP, IP_ADD_MEMBERSHIP, &multicastRequest, sizeof(multicastRequest)) < 0) {
+  if (setsockopt(turmas[num_turmas].sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &multicastRequest, sizeof(multicastRequest)) < 0) {
       perror("Erro ao participar do grupo multicast");
       exit(1);
   }
 
-  pthread_create(&my_treads[num_turmas], NULL, receiveMulticastMessage, (void *)&sock[num_turmas]);
+  pthread_create(&turmas[num_turmas].my_treads, NULL, receiveMulticastMessage, (void *)&turmas[num_turmas].sock);
 }
 
 int main(int argc, char *argv[]) {
@@ -123,7 +127,7 @@ int main(int argc, char *argv[]) {
 
   signal(SIGINT, signalHandler);
 
-  my_treads = (pthread_t *)malloc(MAX_TURMAS * sizeof(pthread_t));
+  turmas = (Turma *) malloc(sizeof(Turma) * MAX_TURMAS);
 
   char endServer[100];
   struct sockaddr_in addr;
@@ -197,6 +201,7 @@ int main(int argc, char *argv[]) {
         buffer[nread] = '\0';
         printf("%s\n", buffer);
       }else if(strstr(buffer, "ACCEPTED") != NULL) {
+        num_turmas++;
         joinMulticast(buffer);
       }
 

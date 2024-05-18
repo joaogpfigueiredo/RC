@@ -109,7 +109,7 @@ void list_users(int udp_fd, struct sockaddr_in si_outra, socklen_t slen) {
     }
 
     sendMessage(udp_fd, message, si_outra, slen);
-    sendMessage(udp_fd, "Usuário Listados em Cima!\n", si_outra, slen);
+    sendMessage(udp_fd, "Usuários Listados em Cima!\n", si_outra, slen);
 
 }
 
@@ -348,7 +348,7 @@ void *process_client(void *arg) {
                     buffer[nread] = '\0';
                     buffer[strcspn(buffer, "\r\n")] = 0;
                     if(strcmp(role,"aluno") == 0) {
-                        if(sscanf(buffer,"%s %s",comando,args) != 2) {
+                        if(sscanf(buffer,"%s %s", comando, args) != 2) {
                             if(strcmp(buffer,"LIST_CLASSES") == 0) {
                                 list_classes(client_socket);
                             }else if(strcmp(buffer,"LIST_SUBSCRIBED") == 0) {
@@ -377,7 +377,12 @@ void *process_client(void *arg) {
                             if(strcmp(comando,"CREATE_CLASS") == 0) {
                                 create_class(client_socket, args, args1, username);
                             }else if(strcmp(comando,"SEND") == 0) {
-                                sendToMulticast(client_socket, args, args1);
+                                
+                                char *mensagem = strchr(buffer, ' ');
+                                mensagem = strchr(mensagem + 1, ' ');
+                                mensagem = mensagem + 1;
+                                
+                                sendToMulticast(client_socket, args, mensagem);
                             } else{
                                 write(client_socket, "Comando Inválido!", strlen("Comando Inválido!"));
                             }
